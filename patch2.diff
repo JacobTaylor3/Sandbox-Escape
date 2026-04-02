@@ -1,0 +1,53 @@
+diff --git a/content/browser/installedapp/installed_app_provider_impl.cc b/content/browser/installedapp/installed_app_provider_impl.cc
+index 16c8a436af44..2bba34d6f623 100644
+--- a/content/browser/installedapp/installed_app_provider_impl.cc
++++ b/content/browser/installedapp/installed_app_provider_impl.cc
+@@ -34,7 +34,8 @@ void DidGetInstalledApps(
+ 
+ InstalledAppProviderImpl::InstalledAppProviderImpl(
+     RenderFrameHost* render_frame_host)
+-    : render_frame_host_(render_frame_host) {
++    : process_id_(render_frame_host->GetProcess()->GetID()),
++      render_frame_id_(render_frame_host->GetRoutingID()) {
+   DCHECK(render_frame_host_);
+ }
+ 
+@@ -42,17 +43,22 @@ void InstalledAppProviderImpl::FilterInstalledApps(
+     std::vector<blink::mojom::RelatedApplicationPtr> related_apps,
+     const GURL& manifest_url,
+     FilterInstalledAppsCallback callback) {
++  auto* rfh = RenderFrameHost::FromID(process_id_, render_frame_id_);
++  if (!rfh) {
++    std::move(callback).Run(std::vector<blink::mojom::RelatedApplicationPtr>());
++  }
++
+   bool is_implemented = false;
+   if (base::FeatureList::IsEnabled(features::kInstalledAppProvider)) {
+ #if defined(OS_WIN)
+     is_implemented = true;
+     bool is_off_the_record =
+-        render_frame_host_->GetProcess()->GetBrowserContext()->IsOffTheRecord();
++        rfh->GetProcess()->GetBrowserContext()->IsOffTheRecord();
+     installed_app_provider_win::FilterInstalledAppsForWin(
+         std::move(related_apps),
+         base::BindOnce(&DidGetInstalledApps, is_off_the_record,
+                        std::move(callback)),
+-        render_frame_host_);
++        rfh);
+ #endif
+   }
+ 
+diff --git a/content/browser/installedapp/installed_app_provider_impl.h b/content/browser/installedapp/installed_app_provider_impl.h
+index 213dc0e09ea8..5895fe485cd7 100644
+--- a/content/browser/installedapp/installed_app_provider_impl.h
++++ b/content/browser/installedapp/installed_app_provider_impl.h
+@@ -31,7 +31,8 @@ class InstalledAppProviderImpl : public blink::mojom::InstalledAppProvider {
+       FilterInstalledAppsCallback callback) override;
+ 
+  private:
+-  RenderFrameHost* const render_frame_host_;
++  int process_id_;
++  int render_frame_id_;
+ };
+ 
+ }  // namespace content
